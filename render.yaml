@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: freefire-userbot
+    env: python
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: SESSION_STRING
+        sync: false
+      - key: PORT
+        value: 10000
+      - key: PYTHONIOENCODING
+        value: utf-8
