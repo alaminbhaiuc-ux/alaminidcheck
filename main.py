@@ -3,10 +3,12 @@ import os
 import sys
 import asyncio
 import logging
-from datetime import datetime
+import random
+import string
+from datetime import datetime, timedelta
 from flask import Flask
 from threading import Thread
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 import requests
 
@@ -24,6 +26,26 @@ logging.basicConfig(
 API_ID = int(os.environ.get("API_ID", "0"))
 API_HASH = os.environ.get("API_HASH", "")
 SESSION_STRING = os.environ.get("SESSION_STRING", "")
+
+# New environment variables for authorization and chat IDs
+AUTHORIZED_USERS = os.environ.get("AUTHORIZED_USERS", "")  # Comma-separated user IDs
+AUTHORIZED_GROUPS = os.environ.get("AUTHORIZED_GROUPS", "")  # Comma-separated group chat IDs
+
+# Parse authorized users
+authorized_user_ids = []
+if AUTHORIZED_USERS:
+    try:
+        authorized_user_ids = [int(uid.strip()) for uid in AUTHORIZED_USERS.split(",") if uid.strip()]
+    except:
+        logging.warning("Error parsing AUTHORIZED_USERS")
+
+# Parse authorized groups
+authorized_group_ids = []
+if AUTHORIZED_GROUPS:
+    try:
+        authorized_group_ids = [int(gid.strip()) for gid in AUTHORIZED_GROUPS.split(",") if gid.strip()]
+    except:
+        logging.warning("Error parsing AUTHORIZED_GROUPS")
 
 # Validate environment variables
 if not API_ID or API_ID == 0:
@@ -198,12 +220,48 @@ def format_player_profile(data):
         logging.error("Format Error: {}".format(e))
         return "```\nError formatting data: {}\n```".format(str(e))
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'(?i)^\.Cid\s+(\d+)$'))
+# Authorization checker
+async def is_authorized(event):
+    """Check if user and chat are authorized"""
+    user_id = event.sender_id
+    chat_id = event.chat_id
+    
+    # Get bot owner ID
+    me = await client.get_me()
+    owner_id = me.id
+    
+    # Owner always has access everywhere
+    if user_id == owner_id:
+        return True
+    
+    # Check if it's a private chat
+    if event.is_private:
+        # In private chats, check if user is authorized
+        if not authorized_user_ids:
+            return False
+        return user_id in authorized_user_ids
+    else:
+        # In groups, check if group is authorized
+        # If group is in authorized list, ALL users in that group can use the bot
+        if authorized_group_ids and chat_id in authorized_group_ids:
+            return True
+        
+        # If group is not authorized, deny access
+        return False
+
+# ================ COMMANDS ================
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.Cid\s+(\d+)$'))
 async def cid_command(event):
+    # Check authorization
+    if not await is_authorized(event):
+        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
+        return
+    
     try:
         uid = event.pattern_match.group(1)
         
-        processing_msg = await event.edit("🔍 Fetching player details...")
+        processing_msg = await event.reply("🔍 Fetching player details...")
         
         data = fetch_player_data(uid)
         
@@ -221,14 +279,87 @@ async def cid_command(event):
         
     except Exception as e:
         logging.error("Command Error: {}".format(e))
-        await event.edit("```\nError: {}\n```".format(str(e)))
+        await event.reply("```\nError: {}\n```".format(str(e)))
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'(?i)^\.ping$'))
+@client.on(events.NewMessage(pattern=r'(?i)^\.cd$'))
+async def chatid_command(event):
+    """Get chat ID or user details"""
+    if not await is_authorized(event):
+        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
+        return
+    
+    try:
+        chat = await event.get_chat()
+        
+        # Check if it's a private chat
+        if event.is_private:
+            # Get the other user's details
+            user = await client.get_entity(event.chat_id)
+            
+            lines = []
+            lines.append("```")
+            lines.append("👤 User Details")
+            lines.append("═══════════════════════════════")
+            lines.append("🆔 User ID: {}".format(user.id))
+            lines.append("📛 First Name: {}".format(user.first_name or "N/A"))
+            lines.append("📝 Last Name: {}".format(user.last_name or "N/A"))
+            lines.append("🔗 Username: @{}".format(user.username if user.username else "N/A"))
+            lines.append("📱 Phone: {}".format(user.phone if hasattr(user, 'phone') and user.phone else "N/A"))
+            lines.append("🤖 Is Bot: {}".format("Yes" if user.bot else "No"))
+            lines.append("✅ Verified: {}".format("Yes" if getattr(user, 'verified', False) else "No"))
+            lines.append("🚫 Restricted: {}".format("Yes" if getattr(user, 'restricted', False) else "No"))
+            lines.append("📵 Scam: {}".format("Yes" if getattr(user, 'scam', False) else "No"))
+            lines.append("```")
+            
+            await event.reply("\n".join(lines))
+        else:
+            # It's a group or channel
+            lines = []
+            lines.append("```")
+            lines.append("💬 Chat Details")
+            lines.append("═══════════════════════════════")
+            lines.append("🆔 Chat ID: {}".format(event.chat_id))
+            lines.append("📛 Title: {}".format(chat.title if hasattr(chat, 'title') else "N/A"))
+            lines.append("🔗 Username: @{}".format(chat.username if hasattr(chat, 'username') and chat.username else "N/A"))
+            
+            # Determine chat type
+            if hasattr(chat, 'megagroup') and chat.megagroup:
+                chat_type = "Supergroup"
+            elif hasattr(chat, 'broadcast') and chat.broadcast:
+                chat_type = "Channel"
+            elif hasattr(chat, 'gigagroup') and chat.gigagroup:
+                chat_type = "Gigagroup"
+            else:
+                chat_type = "Group"
+            
+            lines.append("📊 Type: {}".format(chat_type))
+            
+            # Members count (if available)
+            if hasattr(chat, 'participants_count'):
+                lines.append("👥 Members: {}".format(format_number(chat.participants_count)))
+            
+            lines.append("```")
+            
+            await event.reply("\n".join(lines))
+        
+    except Exception as e:
+        logging.error("Chat ID Command Error: {}".format(e))
+        await event.reply("```\nError: {}\n```".format(str(e)))
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.ping$'))
 async def ping_command(event):
-    await event.edit("```\n🏓 Pong! Bot is alive!\n```")
+    if not await is_authorized(event):
+        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
+        return
+    
+    await event.reply("```\n🏓 Pong! Bot is alive!\n```")
 
-@client.on(events.NewMessage(outgoing=True, pattern=r'(?i)^\.help$'))
+@client.on(events.NewMessage(pattern=r'(?i)^\.help$'))
 async def help_command(event):
+    if not await is_authorized(event):
+        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
+        return
+    
     help_lines = []
     help_lines.append("```")
     help_lines.append("🤖 Free Fire Userbot Commands")
@@ -238,13 +369,16 @@ async def help_command(event):
     help_lines.append("  → Get Free Fire player details")
     help_lines.append("  → Example: .Cid 2716319203")
     help_lines.append("")
+    help_lines.append(".cd")
+    help_lines.append("  → Get chat/user ID details")
+    help_lines.append("")
     help_lines.append(".ping")
     help_lines.append("  → Check if bot is alive")
     help_lines.append("")
     help_lines.append(".help")
     help_lines.append("  → Show this help message")
     help_lines.append("```")
-    await event.edit("\n".join(help_lines))
+    await event.reply("\n".join(help_lines))
 
 async def main():
     try:
@@ -261,7 +395,9 @@ async def main():
         logging.info("Userbot started successfully!")
         logging.info("User: {} (@{})".format(me.first_name, me.username if me.username else "No username"))
         logging.info("ID: {}".format(me.id))
-        logging.info("Ready! Use .Cid [UID]")
+        logging.info("Authorized Users: {}".format(authorized_user_ids if authorized_user_ids else "Owner only"))
+        logging.info("Authorized Groups: {}".format(authorized_group_ids if authorized_group_ids else "None"))
+        logging.info("Ready! Commands: .Cid, .cd, .ping, .help")
         
         # Keep the client running
         await client.run_until_disconnected()
