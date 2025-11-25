@@ -63,6 +63,9 @@ if not SESSION_STRING:
 # Initialize Telethon with StringSession
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
+# Global variable to cache owner ID (FIX #1)
+OWNER_ID = None
+
 # Flask app
 app = Flask(__name__)
 
@@ -133,7 +136,7 @@ def get_rank_tier(rank):
 
 def fetch_player_data(uid, server="bd"):
     try:
-        url = "https://freefire-api-hkqw.onrender.com/get_player_personal_show?server={}&uid={}".format(server, uid)
+        url = "https://freefire-api-2-e4j5.onrender.com/get_player_personal_show?server={}&uid={}".format(server, uid)
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json()
@@ -492,18 +495,22 @@ def format_player_profile(data):
         logging.error("Format Error: {}".format(e))
         return "```\nError formatting data: {}\n```".format(str(e))
 
-# Authorization checker
+# ================ FIXED AUTHORIZATION CHECKER ================
+
 async def is_authorized(event):
     """Check if user and chat are authorized"""
+    global OWNER_ID
+    
+    # Get sender ID - handle None case (FIX #3)
     user_id = event.sender_id
+    if user_id is None:
+        return False
+    
     chat_id = event.chat_id
     
-    # Get bot owner ID
-    me = await client.get_me()
-    owner_id = me.id
-    
+    # Use cached owner ID instead of calling API every time (FIX #1)
     # Owner always has access everywhere
-    if user_id == owner_id:
+    if user_id == OWNER_ID:
         return True
     
     # Check if it's a private chat
@@ -513,12 +520,16 @@ async def is_authorized(event):
             return False
         return user_id in authorized_user_ids
     else:
-        # In groups, check if group is authorized
-        # If group is in authorized list, ALL users in that group can use the bot
+        # In groups/channels (FIX #2)
+        # First check if user is individually authorized (they can use bot anywhere)
+        if user_id in authorized_user_ids:
+            return True
+        
+        # Then check if group is authorized (all users in that group can use)
         if authorized_group_ids and chat_id in authorized_group_ids:
             return True
         
-        # If group is not authorized, deny access
+        # If neither user nor group is authorized, deny access
         return False
 
 # ================ COMMANDS ================
@@ -737,6 +748,8 @@ async def help_command(event):
     await event.reply("\n".join(help_lines))
 
 async def main():
+    global OWNER_ID  # Declare global to modify it
+    
     try:
         # Connect to Telegram
         await client.connect()
@@ -747,7 +760,10 @@ async def main():
             logging.error("Please generate a new session string.")
             sys.exit(1)
         
+        # Cache owner ID at startup (FIX #1 - only call once)
         me = await client.get_me()
+        OWNER_ID = me.id
+        
         logging.info("Userbot started successfully!")
         logging.info("User: {} (@{})".format(me.first_name, me.username if me.username else "No username"))
         logging.info("ID: {}".format(me.id))
