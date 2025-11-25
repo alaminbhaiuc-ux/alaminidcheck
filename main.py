@@ -91,6 +91,34 @@ def format_number(num):
     except:
         return str(num)
 
+def format_time(seconds):
+    """Convert seconds to readable time format"""
+    try:
+        seconds = int(seconds)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return "{}h {}m {}s".format(hours, minutes, secs)
+        elif minutes > 0:
+            return "{}m {}s".format(minutes, secs)
+        else:
+            return "{}s".format(secs)
+    except:
+        return str(seconds)
+
+def format_distance(meters):
+    """Convert meters to readable distance format"""
+    try:
+        meters = int(meters)
+        if meters >= 1000:
+            km = meters / 1000
+            return "{:.2f} km".format(km)
+        else:
+            return "{} m".format(meters)
+    except:
+        return str(meters)
+
 def get_rank_tier(rank):
     if rank <= 100:
         return "Heroic"
@@ -105,13 +133,257 @@ def get_rank_tier(rank):
 
 def fetch_player_data(uid, server="bd"):
     try:
-        url = "https://freefire-api-2-e4j5.onrender.com/get_player_personal_show?server={}&uid={}".format(server, uid)
+        url = "https://freefire-api-hkqw.onrender.com/get_player_personal_show?server={}&uid={}".format(server, uid)
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception as e:
         logging.error("API Error: {}".format(e))
         return None
+
+def fetch_player_stats(uid, matchmode="CAREER", gamemode="br", server="bd"):
+    """Fetch player stats from API"""
+    try:
+        url = "https://freefire-api-hkqw.onrender.com/get_player_stats?server={}&uid={}&matchmode={}&gamemode={}".format(
+            server, uid, matchmode.upper(), gamemode.lower()
+        )
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logging.error("Stats API Error: {}".format(e))
+        return None
+
+def calculate_kd(kills, deaths):
+    """Calculate K/D ratio"""
+    try:
+        kills = int(kills)
+        deaths = int(deaths)
+        if deaths == 0:
+            return "{:.2f}".format(float(kills))
+        return "{:.2f}".format(kills / deaths)
+    except:
+        return "N/A"
+
+def calculate_winrate(wins, games):
+    """Calculate win rate percentage"""
+    try:
+        wins = int(wins)
+        games = int(games)
+        if games == 0:
+            return "0.00%"
+        return "{:.2f}%".format((wins / games) * 100)
+    except:
+        return "N/A"
+
+def calculate_headshot_rate(headshot_kills, kills):
+    """Calculate headshot rate percentage"""
+    try:
+        headshot_kills = int(headshot_kills)
+        kills = int(kills)
+        if kills == 0:
+            return "0.00%"
+        return "{:.2f}%".format((headshot_kills / kills) * 100)
+    except:
+        return "N/A"
+
+def format_br_stats(data, matchmode, uid):
+    """Format Battle Royale stats beautifully"""
+    try:
+        stats_data = data.get("data", {})
+        metadata = data.get("metadata", {})
+        
+        solo = stats_data.get("solostats", {})
+        duo = stats_data.get("duostats", {})
+        quad = stats_data.get("quadstats", {})
+        
+        lines = []
+        lines.append("```")
+        lines.append("🎮 FREE FIRE BATTLE ROYALE STATS")
+        lines.append("═════════════════════════════════════")
+        lines.append("")
+        lines.append("🆔 Player ID: {}".format(uid))
+        lines.append("📊 Match Mode: {}".format(matchmode.upper()))
+        lines.append("🎯 Game Mode: Battle Royale")
+        lines.append("🌍 Server: {}".format(metadata.get("server", "BD").upper()))
+        lines.append("")
+        
+        # ═══════════════ SOLO STATS ═══════════════
+        lines.append("👤 SOLO STATISTICS")
+        lines.append("─────────────────────────────────────")
+        solo_detailed = solo.get("detailedstats", {})
+        if solo.get("gamesplayed") or solo.get("kills") or solo.get("wins"):
+            games = solo.get("gamesplayed", 0)
+            kills = solo.get("kills", 0)
+            wins = solo.get("wins", 0)
+            deaths = solo_detailed.get("deaths", 0)
+            hs_kills = solo_detailed.get("headshotkills", 0)
+            
+            lines.append("🎮 Games Played: {}".format(format_number(games)))
+            lines.append("🏆 Wins: {} ({})".format(format_number(wins), calculate_winrate(wins, games)))
+            lines.append("💀 Kills: {}".format(format_number(kills)))
+            lines.append("☠️ Deaths: {}".format(format_number(deaths)))
+            lines.append("📈 K/D Ratio: {}".format(calculate_kd(kills, deaths)))
+            lines.append("🎯 Headshot Kills: {} ({})".format(format_number(hs_kills), calculate_headshot_rate(hs_kills, kills)))
+            lines.append("💥 Damage: {}".format(format_number(solo_detailed.get("damage", 0))))
+            lines.append("🔫 Highest Kills: {}".format(solo_detailed.get("highestkills", 0)))
+            lines.append("⏱️ Survival Time: {}".format(format_time(solo_detailed.get("survivaltime", 0))))
+            lines.append("🏃 Distance: {}".format(format_distance(solo_detailed.get("distancetravelled", 0))))
+            lines.append("📦 Pickups: {}".format(format_number(solo_detailed.get("pickups", 0))))
+            lines.append("🚗 Road Kills: {}".format(solo_detailed.get("roadkills", 0)))
+            lines.append("🔝 Top 10 Finishes: {}".format(solo_detailed.get("topntimes", 0)))
+        else:
+            lines.append("❌ No solo stats available")
+        lines.append("")
+        
+        # ═══════════════ DUO STATS ═══════════════
+        lines.append("👥 DUO STATISTICS")
+        lines.append("─────────────────────────────────────")
+        duo_detailed = duo.get("detailedstats", {})
+        if duo.get("gamesplayed") or duo.get("kills") or duo.get("wins"):
+            games = duo.get("gamesplayed", 0)
+            kills = duo.get("kills", 0)
+            wins = duo.get("wins", 0)
+            deaths = duo_detailed.get("deaths", 0)
+            hs_kills = duo_detailed.get("headshotkills", 0)
+            
+            lines.append("🎮 Games Played: {}".format(format_number(games)))
+            lines.append("🏆 Wins: {} ({})".format(format_number(wins), calculate_winrate(wins, games)))
+            lines.append("💀 Kills: {}".format(format_number(kills)))
+            lines.append("☠️ Deaths: {}".format(format_number(deaths)))
+            lines.append("📈 K/D Ratio: {}".format(calculate_kd(kills, deaths)))
+            lines.append("🎯 Headshot Kills: {} ({})".format(format_number(hs_kills), calculate_headshot_rate(hs_kills, kills)))
+            lines.append("💥 Damage: {}".format(format_number(duo_detailed.get("damage", 0))))
+            lines.append("🔫 Highest Kills: {}".format(duo_detailed.get("highestkills", 0)))
+            lines.append("👊 Knockdowns: {}".format(format_number(duo_detailed.get("knockdown", 0))))
+            lines.append("💉 Revives: {}".format(duo_detailed.get("revives", 0)))
+            lines.append("⏱️ Survival Time: {}".format(format_time(duo_detailed.get("survivaltime", 0))))
+            lines.append("🏃 Distance: {}".format(format_distance(duo_detailed.get("distancetravelled", 0))))
+            lines.append("📦 Pickups: {}".format(format_number(duo_detailed.get("pickups", 0))))
+            lines.append("🚗 Road Kills: {}".format(duo_detailed.get("roadkills", 0)))
+            lines.append("🔝 Top 10 Finishes: {}".format(duo_detailed.get("topntimes", 0)))
+        else:
+            lines.append("❌ No duo stats available")
+        lines.append("")
+        
+        # ═══════════════ SQUAD STATS ═══════════════
+        lines.append("👨‍👩‍👧‍👦 SQUAD STATISTICS")
+        lines.append("─────────────────────────────────────")
+        quad_detailed = quad.get("detailedstats", {})
+        if quad.get("gamesplayed") or quad.get("kills") or quad.get("wins"):
+            games = quad.get("gamesplayed", 0)
+            kills = quad.get("kills", 0)
+            wins = quad.get("wins", 0)
+            deaths = quad_detailed.get("deaths", 0)
+            hs_kills = quad_detailed.get("headshotkills", 0)
+            
+            lines.append("🎮 Games Played: {}".format(format_number(games)))
+            lines.append("🏆 Wins: {} ({})".format(format_number(wins), calculate_winrate(wins, games)))
+            lines.append("💀 Kills: {}".format(format_number(kills)))
+            lines.append("☠️ Deaths: {}".format(format_number(deaths)))
+            lines.append("📈 K/D Ratio: {}".format(calculate_kd(kills, deaths)))
+            lines.append("🎯 Headshot Kills: {} ({})".format(format_number(hs_kills), calculate_headshot_rate(hs_kills, kills)))
+            lines.append("💥 Damage: {}".format(format_number(quad_detailed.get("damage", 0))))
+            lines.append("🔫 Highest Kills: {}".format(quad_detailed.get("highestkills", 0)))
+            lines.append("👊 Knockdowns: {}".format(format_number(quad_detailed.get("knockdown", 0))))
+            lines.append("💉 Revives: {}".format(quad_detailed.get("revives", 0)))
+            lines.append("⏱️ Survival Time: {}".format(format_time(quad_detailed.get("survivaltime", 0))))
+            lines.append("🏃 Distance: {}".format(format_distance(quad_detailed.get("distancetravelled", 0))))
+            lines.append("📦 Pickups: {}".format(format_number(quad_detailed.get("pickups", 0))))
+            lines.append("🚗 Road Kills: {}".format(quad_detailed.get("roadkills", 0)))
+            lines.append("🔝 Top 10 Finishes: {}".format(quad_detailed.get("topntimes", 0)))
+        else:
+            lines.append("❌ No squad stats available")
+        
+        lines.append("")
+        lines.append("═════════════════════════════════════")
+        lines.append("```")
+        return "\n".join(lines)
+        
+    except Exception as e:
+        logging.error("BR Stats Format Error: {}".format(e))
+        return "```\n❌ Error formatting BR stats: {}\n```".format(str(e))
+
+def format_cs_stats(data, matchmode, uid):
+    """Format Clash Squad stats beautifully"""
+    try:
+        stats_data = data.get("data", {})
+        metadata = data.get("metadata", {})
+        
+        cs = stats_data.get("csstats", {})
+        cs_detailed = cs.get("detailedstats", {})
+        
+        lines = []
+        lines.append("```")
+        lines.append("⚔️ FREE FIRE CLASH SQUAD STATS")
+        lines.append("═════════════════════════════════════")
+        lines.append("")
+        lines.append("🆔 Player ID: {}".format(uid))
+        lines.append("📊 Match Mode: {}".format(matchmode.upper()))
+        lines.append("🎯 Game Mode: Clash Squad")
+        lines.append("🌍 Server: {}".format(metadata.get("server", "BD").upper()))
+        lines.append("")
+        
+        if cs.get("gamesplayed") or cs.get("kills") or cs.get("wins"):
+            games = cs.get("gamesplayed", 0)
+            kills = cs.get("kills", 0)
+            wins = cs.get("wins", 0)
+            deaths = cs_detailed.get("deaths", 0)
+            hs_kills = cs_detailed.get("headshotkills", 0)
+            
+            lines.append("📊 GENERAL STATISTICS")
+            lines.append("─────────────────────────────────────")
+            lines.append("🎮 Games Played: {}".format(format_number(games)))
+            lines.append("🏆 Wins: {} ({})".format(format_number(wins), calculate_winrate(wins, games)))
+            lines.append("💀 Kills: {}".format(format_number(kills)))
+            lines.append("☠️ Deaths: {}".format(format_number(deaths)))
+            lines.append("📈 K/D Ratio: {}".format(calculate_kd(kills, deaths)))
+            lines.append("🎯 Headshot Kills: {} ({})".format(format_number(hs_kills), calculate_headshot_rate(hs_kills, kills)))
+            lines.append("💥 Damage: {}".format(format_number(cs_detailed.get("damage", 0))))
+            lines.append("👊 Knockdowns: {}".format(format_number(cs_detailed.get("knockdowns", 0))))
+            lines.append("🤝 Assists: {}".format(format_number(cs_detailed.get("assists", 0))))
+            lines.append("💉 Revivals: {}".format(format_number(cs_detailed.get("revivals", 0))))
+            lines.append("⭐ MVP Count: {}".format(format_number(cs_detailed.get("mvpcount", 0))))
+            lines.append("")
+            
+            lines.append("🔥 MULTI-KILL STATISTICS")
+            lines.append("─────────────────────────────────────")
+            lines.append("2️⃣ Double Kills: {}".format(format_number(cs_detailed.get("doublekills", 0))))
+            lines.append("3️⃣ Triple Kills: {}".format(format_number(cs_detailed.get("triplekills", 0))))
+            lines.append("4️⃣ Quadra Kills: {}".format(format_number(cs_detailed.get("fourkills", 0))))
+            
+            # Additional stats for ranked mode
+            if matchmode.upper() == "RANKED":
+                lines.append("")
+                lines.append("🏅 RANKED STATISTICS")
+                lines.append("─────────────────────────────────────")
+                if cs_detailed.get("ratingpoints"):
+                    lines.append("⭐ Rating Points: {:.2f}".format(cs_detailed.get("ratingpoints", 0)))
+                if cs_detailed.get("ratingenabledgames"):
+                    lines.append("🎮 Ranked Games: {}".format(cs_detailed.get("ratingenabledgames", 0)))
+                if cs_detailed.get("streakwins"):
+                    lines.append("🔥 Win Streak: {}".format(cs_detailed.get("streakwins", 0)))
+                if cs_detailed.get("onegamemostkills"):
+                    lines.append("🔫 Best Kills (1 Game): {}".format(cs_detailed.get("onegamemostkills", 0)))
+                if cs_detailed.get("onegamemostdamage"):
+                    lines.append("💥 Best Damage (1 Game): {}".format(format_number(cs_detailed.get("onegamemostdamage", 0))))
+                if cs_detailed.get("headshotcount"):
+                    lines.append("🎯 Total Headshots: {}".format(format_number(cs_detailed.get("headshotcount", 0))))
+                if cs_detailed.get("hitcount"):
+                    lines.append("🔫 Total Hits: {}".format(format_number(cs_detailed.get("hitcount", 0))))
+                if cs_detailed.get("throwingkills"):
+                    lines.append("💣 Grenade Kills: {}".format(cs_detailed.get("throwingkills", 0)))
+        else:
+            lines.append("❌ No Clash Squad stats available")
+        
+        lines.append("")
+        lines.append("═════════════════════════════════════")
+        lines.append("```")
+        return "\n".join(lines)
+        
+    except Exception as e:
+        logging.error("CS Stats Format Error: {}".format(e))
+        return "```\n❌ Error formatting CS stats: {}\n```".format(str(e))
 
 def format_player_profile(data):
     try:
@@ -253,9 +525,8 @@ async def is_authorized(event):
 
 @client.on(events.NewMessage(pattern=r'(?i)^\.Cid\s+(\d+)$'))
 async def cid_command(event):
-    # Check authorization
+    # Check authorization - silently ignore if not authorized
     if not await is_authorized(event):
-        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
         return
     
     try:
@@ -281,11 +552,89 @@ async def cid_command(event):
         logging.error("Command Error: {}".format(e))
         await event.reply("```\nError: {}\n```".format(str(e)))
 
+@client.on(events.NewMessage(pattern=r'(?i)^\.ps\s+(\d+)\s+(\w+)\s+(\w+)$'))
+async def player_stats_command(event):
+    """Get player stats - .ps (uid) (matchmode) (gamemode)"""
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    try:
+        uid = event.pattern_match.group(1)
+        matchmode = event.pattern_match.group(2).upper()
+        gamemode = event.pattern_match.group(3).lower()
+        
+        # Validate matchmode
+        valid_matchmodes = ["CAREER", "NORMAL", "RANKED"]
+        if matchmode not in valid_matchmodes:
+            await event.reply("```\n❌ Invalid Match Mode!\n\nValid options: CAREER, NORMAL, RANKED\n\nExample: .ps 1710824990 CAREER br\n```")
+            return
+        
+        # Validate gamemode
+        valid_gamemodes = ["br", "cs"]
+        if gamemode not in valid_gamemodes:
+            await event.reply("```\n❌ Invalid Game Mode!\n\nValid options: br, cs\n\nExample: .ps 1710824990 CAREER br\n```")
+            return
+        
+        processing_msg = await event.reply("🔍 Fetching player stats for UID: {}...\n📊 Mode: {} | 🎯 Game: {}".format(uid, matchmode, gamemode.upper()))
+        
+        data = fetch_player_stats(uid, matchmode, gamemode)
+        
+        if data is None:
+            await processing_msg.edit("```\n❌ Error: Unable to fetch data from API.\nPlease try again later.\n```")
+            return
+        
+        if not data.get("success", False):
+            await processing_msg.edit("```\n❌ Error: API returned failure.\nUID: {}\nPlease check if the UID is correct.\n```".format(uid))
+            return
+        
+        # Format stats based on gamemode
+        if gamemode == "br":
+            formatted_stats = format_br_stats(data, matchmode, uid)
+        else:
+            formatted_stats = format_cs_stats(data, matchmode, uid)
+        
+        await processing_msg.edit(formatted_stats)
+        
+    except Exception as e:
+        logging.error("Player Stats Command Error: {}".format(e))
+        await event.reply("```\n❌ Error: {}\n```".format(str(e)))
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.ps$'))
+async def player_stats_help(event):
+    """Show help for .ps command when used without arguments"""
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    help_lines = []
+    help_lines.append("```")
+    help_lines.append("📊 Player Stats Command Usage")
+    help_lines.append("═════════════════════════════════════")
+    help_lines.append("")
+    help_lines.append("Format: .ps [UID] [MATCHMODE] [GAMEMODE]")
+    help_lines.append("")
+    help_lines.append("📋 MATCH MODES:")
+    help_lines.append("  • CAREER  - All-time statistics")
+    help_lines.append("  • RANKED  - Ranked match stats")
+    help_lines.append("  • NORMAL  - Normal match stats")
+    help_lines.append("")
+    help_lines.append("🎮 GAME MODES:")
+    help_lines.append("  • br - Battle Royale")
+    help_lines.append("  • cs - Clash Squad")
+    help_lines.append("")
+    help_lines.append("📝 EXAMPLES:")
+    help_lines.append("  .ps 1710824990 CAREER br")
+    help_lines.append("  .ps 1710824990 RANKED cs")
+    help_lines.append("  .ps 1710824990 NORMAL br")
+    help_lines.append("```")
+    await event.reply("\n".join(help_lines))
+
 @client.on(events.NewMessage(pattern=r'(?i)^\.cd$'))
 async def chatid_command(event):
     """Get chat ID or user details"""
+    # Check authorization - silently ignore if not authorized
     if not await is_authorized(event):
-        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
         return
     
     try:
@@ -348,16 +697,16 @@ async def chatid_command(event):
 
 @client.on(events.NewMessage(pattern=r'(?i)^\.ping$'))
 async def ping_command(event):
+    # Check authorization - silently ignore if not authorized
     if not await is_authorized(event):
-        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
         return
     
     await event.reply("```\n🏓 Pong! Bot is alive!\n```")
 
 @client.on(events.NewMessage(pattern=r'(?i)^\.help$'))
 async def help_command(event):
+    # Check authorization - silently ignore if not authorized
     if not await is_authorized(event):
-        await event.reply("```\n❌ You are not authorized to use this bot.\n```")
         return
     
     help_lines = []
@@ -366,8 +715,15 @@ async def help_command(event):
     help_lines.append("═══════════════════════════════")
     help_lines.append("")
     help_lines.append(".Cid [UID]")
-    help_lines.append("  → Get Free Fire player details")
+    help_lines.append("  → Get Free Fire player profile")
     help_lines.append("  → Example: .Cid 2716319203")
+    help_lines.append("")
+    help_lines.append(".ps [UID] [MATCHMODE] [GAMEMODE]")
+    help_lines.append("  → Get player statistics")
+    help_lines.append("  → Match Modes: CAREER, NORMAL, RANKED")
+    help_lines.append("  → Game Modes: br (Battle Royale), cs (Clash Squad)")
+    help_lines.append("  → Example: .ps 1710824990 CAREER br")
+    help_lines.append("  → Example: .ps 1710824990 RANKED cs")
     help_lines.append("")
     help_lines.append(".cd")
     help_lines.append("  → Get chat/user ID details")
@@ -397,7 +753,7 @@ async def main():
         logging.info("ID: {}".format(me.id))
         logging.info("Authorized Users: {}".format(authorized_user_ids if authorized_user_ids else "Owner only"))
         logging.info("Authorized Groups: {}".format(authorized_group_ids if authorized_group_ids else "None"))
-        logging.info("Ready! Commands: .Cid, .cd, .ping, .help")
+        logging.info("Ready! Commands: .Cid, .ps, .cd, .ping, .help")
         
         # Keep the client running
         await client.run_until_disconnected()
