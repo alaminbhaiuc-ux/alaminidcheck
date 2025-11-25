@@ -11,6 +11,7 @@ from threading import Thread
 from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 import requests
+import re
 
 # Configure encoding
 if sys.stdout.encoding != 'utf-8':
@@ -136,7 +137,7 @@ def get_rank_tier(rank):
 
 def fetch_player_data(uid, server="bd"):
     try:
-        url = "https://freefire-api-2-e4j5.onrender.com/get_player_personal_show?server={}&uid={}".format(server, uid)
+        url = "https://freefire-api-hkqw.onrender.com/get_player_personal_show?server={}&uid={}".format(server, uid)
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json()
@@ -189,6 +190,64 @@ def calculate_headshot_rate(headshot_kills, kills):
         return "{:.2f}%".format((headshot_kills / kills) * 100)
     except:
         return "N/A"
+
+# ================ SAFE CALCULATOR FUNCTION ================
+
+def safe_calculate(expression):
+    """
+    Safely evaluate mathematical expressions.
+    Only allows numbers and basic math operators.
+    """
+    # Remove all spaces
+    expression = expression.replace(" ", "")
+    
+    # Check for empty expression
+    if not expression:
+        raise ValueError("Empty expression")
+    
+    # Security: Only allow numbers, operators, parentheses, and decimal points
+    allowed_pattern = r'^[\d+\-*/().%\s]+$'
+    if not re.match(allowed_pattern, expression):
+        raise ValueError("Invalid characters in expression")
+    
+    # Check for dangerous patterns (like multiple operators)
+    dangerous_patterns = [
+        r'[+\-*/]{2,}',  # Multiple operators in a row (except for negative numbers)
+        r'^\*',           # Starting with *
+        r'^\/',           # Starting with /
+        r'\($',           # Ending with (
+        r'^\)',           # Starting with )
+    ]
+    
+    # Allow negative numbers at start or after operators
+    clean_expr = expression.replace('(-', '(0-').replace('--', '+')
+    if clean_expr.startswith('-'):
+        clean_expr = '0' + clean_expr
+    
+    # Evaluate using Python's eval with restricted globals
+    try:
+        # Only allow safe math operations
+        result = eval(clean_expr, {"__builtins__": {}}, {})
+        return result
+    except Exception as e:
+        raise ValueError("Invalid expression: {}".format(str(e)))
+
+def format_calc_result(result):
+    """Format calculation result nicely"""
+    if isinstance(result, float):
+        # If it's a whole number stored as float, show as integer
+        if result.is_integer():
+            return "{:,}".format(int(result))
+        else:
+            # Round to 6 decimal places and format
+            rounded = round(result, 6)
+            return "{:,.6f}".format(rounded).rstrip('0').rstrip('.')
+    elif isinstance(result, int):
+        return "{:,}".format(result)
+    else:
+        return str(result)
+
+# ================ EXISTING FORMAT FUNCTIONS ================
 
 def format_br_stats(data, matchmode, uid):
     """Format Battle Royale stats beautifully"""
@@ -641,6 +700,90 @@ async def player_stats_help(event):
     help_lines.append("```")
     await event.reply("\n".join(help_lines))
 
+# ================ NEW CALCULATOR COMMAND ================
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.c\s+(.+)$'))
+async def calculator_command(event):
+    """Calculator command - .c (expression)"""
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    try:
+        expression = event.pattern_match.group(1).strip()
+        
+        # Security: Only allow numbers, operators, parentheses, decimal points, and spaces
+        allowed_chars = set('0123456789+-*/().% ')
+        if not all(char in allowed_chars for char in expression):
+            await event.reply("```\n❌ Invalid characters in expression!\n\nAllowed: Numbers, +, -, *, /, (, ), ., %\n\nExample: .c 120+22\n```")
+            return
+        
+        # Prevent empty expression
+        if not expression or expression.isspace():
+            await event.reply("```\n❌ Empty expression!\n\nExample: .c 120+22\n```")
+            return
+        
+        # Calculate using safe function
+        result = safe_calculate(expression)
+        formatted_result = format_calc_result(result)
+        
+        lines = []
+        lines.append("```")
+        lines.append("🧮 Calculator")
+        lines.append("═══════════════════════════════")
+        lines.append("📝 Expression: {}".format(expression))
+        lines.append("✅ Result: {}".format(formatted_result))
+        lines.append("```")
+        
+        await event.reply("\n".join(lines))
+        
+    except ZeroDivisionError:
+        await event.reply("```\n❌ Error: Division by zero!\n```")
+    except ValueError as ve:
+        await event.reply("```\n❌ Error: {}\n\nExample: .c 120+22\n```".format(str(ve)))
+    except SyntaxError:
+        await event.reply("```\n❌ Error: Invalid expression syntax!\n\nExample: .c 120+22\n```")
+    except Exception as e:
+        logging.error("Calculator Command Error: {}".format(e))
+        await event.reply("```\n❌ Error: {}\n```".format(str(e)))
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.c$'))
+async def calculator_help(event):
+    """Show help for .c command when used without arguments"""
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    help_lines = []
+    help_lines.append("```")
+    help_lines.append("🧮 Calculator Command Usage")
+    help_lines.append("═════════════════════════════════════")
+    help_lines.append("")
+    help_lines.append("Format: .c [expression]")
+    help_lines.append("")
+    help_lines.append("📋 OPERATORS:")
+    help_lines.append("  • +  Addition")
+    help_lines.append("  • -  Subtraction")
+    help_lines.append("  • *  Multiplication")
+    help_lines.append("  • /  Division")
+    help_lines.append("  • %  Modulo (remainder)")
+    help_lines.append("  • () Parentheses for grouping")
+    help_lines.append("")
+    help_lines.append("📝 EXAMPLES:")
+    help_lines.append("  .c 120+22         → 142")
+    help_lines.append("  .c 100-50         → 50")
+    help_lines.append("  .c 25*4           → 100")
+    help_lines.append("  .c 100/5          → 20")
+    help_lines.append("  .c 10%3           → 1")
+    help_lines.append("  .c (10+5)*2       → 30")
+    help_lines.append("  .c 10+20*3-5      → 65")
+    help_lines.append("  .c 2.5*4          → 10")
+    help_lines.append("  .c (100+50)/2*3   → 225")
+    help_lines.append("```")
+    await event.reply("\n".join(help_lines))
+
+# ================ EXISTING COMMANDS CONTINUED ================
+
 @client.on(events.NewMessage(pattern=r'(?i)^\.cd$'))
 async def chatid_command(event):
     """Get chat ID or user details"""
@@ -736,6 +879,12 @@ async def help_command(event):
     help_lines.append("  → Example: .ps 1710824990 CAREER br")
     help_lines.append("  → Example: .ps 1710824990 RANKED cs")
     help_lines.append("")
+    help_lines.append(".c [expression]")
+    help_lines.append("  → Calculator for math expressions")
+    help_lines.append("  → Supports: +, -, *, /, %, ()")
+    help_lines.append("  → Example: .c 120+22")
+    help_lines.append("  → Example: .c (10+5)*2")
+    help_lines.append("")
     help_lines.append(".cd")
     help_lines.append("  → Get chat/user ID details")
     help_lines.append("")
@@ -769,7 +918,7 @@ async def main():
         logging.info("ID: {}".format(me.id))
         logging.info("Authorized Users: {}".format(authorized_user_ids if authorized_user_ids else "Owner only"))
         logging.info("Authorized Groups: {}".format(authorized_group_ids if authorized_group_ids else "None"))
-        logging.info("Ready! Commands: .Cid, .ps, .cd, .ping, .help")
+        logging.info("Ready! Commands: .Cid, .ps, .c, .cd, .ping, .help")
         
         # Keep the client running
         await client.run_until_disconnected()
