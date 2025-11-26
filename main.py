@@ -968,6 +968,24 @@ async def rcv_command(event):
     
     await event.reply("\n".join(lines))
 
+@client.on(events.NewMessage(pattern=r'(?i)^\.done$'))
+async def done_command(event):
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    lines = []
+    lines.append("✅ 𝗢𝗿𝗱𝗲𝗿 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲𝗱 ✅")
+    lines.append("🎉 𝑨𝒍𝒉𝒂𝒎𝒅𝒖𝒍𝒊𝒍𝒍𝒂𝒉! অর্ডার সফলভাবে সম্পন্ন হয়েছে")
+    lines.append("✨ ধন্যবাদ 𝐔𝐧𝐢𝐕𝐞𝐫𝐬𝐞𝐥 𝐒𝐭𝐨𝐫𝐞–এ ভরসা রাখার জন্য")
+    lines.append("📦 বিশ্বাস ও যত্নের সাথে ডেলিভারি সম্পন্ন 💕")
+    lines.append("💥 𝟏𝟎𝟎% নিরাপদ ও দ্রুত সার্ভিস♻️")
+    lines.append("💬 কোনো প্রশ্ন থাকলে মেসেজ করতে দ্বিধা করবেন না")
+    lines.append("🎁 আবার অর্ডার করুন — এক্সক্লুসিভ চমক অপেক্ষায়!")
+    lines.append("🛒 Stay with us & keep shopping smartly!")
+    
+    await event.reply("\n".join(lines))
+
 @client.on(events.NewMessage(pattern=r'(?i)^\.help$'))
 async def help_command(event):
     # Check authorization - silently ignore if not authorized
