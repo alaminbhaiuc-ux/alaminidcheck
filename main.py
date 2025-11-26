@@ -191,12 +191,59 @@ def calculate_headshot_rate(headshot_kills, kills):
     except:
         return "N/A"
 
+# ================ PERCENTAGE TRANSFORMATION FUNCTION ================
+
+def transform_percentage(expression):
+    """
+    Transform percentage expressions for calculator:
+    A + B% -> A + (A * B / 100)
+    A - B% -> A - (A * B / 100)
+    A * B% -> A * (B / 100)
+    A / B% -> A / (B / 100)
+    B% (standalone) -> (B / 100)
+    """
+    expr = expression.replace(" ", "")
+    
+    if '%' not in expr:
+        return expr
+    
+    # Step 1: Handle A * B% → A * (B / 100)
+    expr = re.sub(r'\*(\d+\.?\d*)%', r'*(\1/100)', expr)
+    
+    # Step 2: Handle A / B% → A / (B / 100)
+    expr = re.sub(r'/(\d+\.?\d*)%', r'/(\1/100)', expr)
+    
+    # Step 3: Handle A + B% → A + (A * B / 100)
+    #         Handle A - B% → A - (A * B / 100)
+    def replace_plus_minus_percent(match):
+        a = match.group(1)
+        op = match.group(2)
+        b = match.group(3)
+        return a + op + '(' + a + '*' + b + '/100)'
+    
+    pattern_plus_minus = r'(\d+\.?\d*)([+\-])(\d+\.?\d*)%'
+    
+    # Apply iteratively for chained operations
+    prev = ""
+    while prev != expr:
+        prev = expr
+        expr = re.sub(pattern_plus_minus, replace_plus_minus_percent, expr, count=1)
+    
+    # Step 4: Handle any remaining standalone B% → (B / 100)
+    expr = re.sub(r'(\d+\.?\d*)%', r'(\1/100)', expr)
+    
+    return expr
+
 # ================ SAFE CALCULATOR FUNCTION ================
 
 def safe_calculate(expression):
     """
     Safely evaluate mathematical expressions.
-    Only allows numbers and basic math operators.
+    Handles percentage calculations:
+    A + B% = A + (A * B / 100)
+    A - B% = A - (A * B / 100)
+    A * B% = A * (B / 100)
+    A / B% = A / (B / 100)
     """
     # Remove all spaces
     expression = expression.replace(" ", "")
@@ -205,19 +252,13 @@ def safe_calculate(expression):
     if not expression:
         raise ValueError("Empty expression")
     
-    # Security: Only allow numbers, operators, parentheses, and decimal points
-    allowed_pattern = r'^[\d+\-*/().%\s]+$'
+    # Security: Only allow numbers, operators, parentheses, decimal points, and %
+    allowed_pattern = r'^[\d+\-*/().%]+$'
     if not re.match(allowed_pattern, expression):
         raise ValueError("Invalid characters in expression")
     
-    # Check for dangerous patterns (like multiple operators)
-    dangerous_patterns = [
-        r'[+\-*/]{2,}',  # Multiple operators in a row (except for negative numbers)
-        r'^\*',           # Starting with *
-        r'^\/',           # Starting with /
-        r'\($',           # Ending with (
-        r'^\)',           # Starting with )
-    ]
+    # Transform percentage expressions FIRST
+    expression = transform_percentage(expression)
     
     # Allow negative numbers at start or after operators
     clean_expr = expression.replace('(-', '(0-').replace('--', '+')
@@ -226,7 +267,6 @@ def safe_calculate(expression):
     
     # Evaluate using Python's eval with restricted globals
     try:
-        # Only allow safe math operations
         result = eval(clean_expr, {"__builtins__": {}}, {})
         return result
     except Exception as e:
@@ -700,7 +740,7 @@ async def player_stats_help(event):
     help_lines.append("```")
     await event.reply("\n".join(help_lines))
 
-# ================ NEW CALCULATOR COMMAND ================
+# ================ CALCULATOR COMMAND (FIXED WITH PROPER %) ================
 
 @client.on(events.NewMessage(pattern=r'(?i)^\.c\s+(.+)$'))
 async def calculator_command(event):
@@ -712,7 +752,7 @@ async def calculator_command(event):
     try:
         expression = event.pattern_match.group(1).strip()
         
-        # Security: Only allow numbers, operators, parentheses, decimal points, and spaces
+        # Security: Only allow numbers, operators, parentheses, decimal points, %, and spaces
         allowed_chars = set('0123456789+-*/().% ')
         if not all(char in allowed_chars for char in expression):
             await event.reply("```\n❌ Invalid characters in expression!\n\nAllowed: Numbers, +, -, *, /, (, ), ., %\n\nExample: .c 120+22\n```")
@@ -723,16 +763,24 @@ async def calculator_command(event):
             await event.reply("```\n❌ Empty expression!\n\nExample: .c 120+22\n```")
             return
         
-        # Calculate using safe function
+        # Store original expression for display
+        original_expr = expression
+        
+        # Calculate using safe function (handles % transformation internally)
         result = safe_calculate(expression)
         formatted_result = format_calc_result(result)
         
         lines = []
         lines.append("```")
-        lines.append("🧮 Calculator")
-        lines.append("═══════════════════════════════")
-        lines.append("📝 Expression: {}".format(expression))
-        lines.append("✅ Result: {}".format(formatted_result))
+        lines.append("❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀")
+        lines.append("🔢 𝗖𝗮𝗹𝗰𝘂𝗹𝗮𝘁𝗶𝗼𝗻 𝗖𝗼𝗺𝗽𝗹𝗲𝘁𝗲")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append("📥 𝗜𝗻𝗽𝘂𝘁 : {}".format(original_expr))
+        lines.append("🎯 𝗥𝗲𝘀𝘂𝗹𝘁: {}".format(formatted_result))
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append("🏷️ 𝗕𝗿𝗮𝗻𝗱     : 𝗨𝗻𝗶𝗩𝗲𝗿𝘀𝗲𝗹 𝗦𝘁𝗼𝗿𝗲")
+        lines.append("🔁 𝗧𝗿𝘆 𝗔𝗴𝗮𝗶𝗻 : .C [expression]")
+        lines.append("❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀❀")
         lines.append("```")
         
         await event.reply("\n".join(lines))
@@ -766,19 +814,28 @@ async def calculator_help(event):
     help_lines.append("  • -  Subtraction")
     help_lines.append("  • *  Multiplication")
     help_lines.append("  • /  Division")
-    help_lines.append("  • %  Modulo (remainder)")
+    help_lines.append("  • %  Percentage")
     help_lines.append("  • () Parentheses for grouping")
+    help_lines.append("")
+    help_lines.append("📊 PERCENTAGE RULES:")
+    help_lines.append("  • A + B% = A + (A × B ÷ 100)")
+    help_lines.append("  • A - B% = A - (A × B ÷ 100)")
+    help_lines.append("  • A * B% = A × (B ÷ 100)")
+    help_lines.append("  • A / B% = A ÷ (B ÷ 100)")
     help_lines.append("")
     help_lines.append("📝 EXAMPLES:")
     help_lines.append("  .c 120+22         → 142")
     help_lines.append("  .c 100-50         → 50")
     help_lines.append("  .c 25*4           → 100")
     help_lines.append("  .c 100/5          → 20")
-    help_lines.append("  .c 10%3           → 1")
+    help_lines.append("  .c 100+10%        → 110")
+    help_lines.append("  .c 100-10%        → 90")
+    help_lines.append("  .c 100*10%        → 10")
+    help_lines.append("  .c 100/10%        → 1,000")
+    help_lines.append("  .c 200+25%        → 250")
+    help_lines.append("  .c 500-20%        → 400")
     help_lines.append("  .c (10+5)*2       → 30")
-    help_lines.append("  .c 10+20*3-5      → 65")
     help_lines.append("  .c 2.5*4          → 10")
-    help_lines.append("  .c (100+50)/2*3   → 225")
     help_lines.append("```")
     await event.reply("\n".join(help_lines))
 
@@ -882,8 +939,9 @@ async def help_command(event):
     help_lines.append(".c [expression]")
     help_lines.append("  → Calculator for math expressions")
     help_lines.append("  → Supports: +, -, *, /, %, ()")
+    help_lines.append("  → Percentage: 100+10% = 110")
     help_lines.append("  → Example: .c 120+22")
-    help_lines.append("  → Example: .c (10+5)*2")
+    help_lines.append("  → Example: .c 100*25%")
     help_lines.append("")
     help_lines.append(".cd")
     help_lines.append("  → Get chat/user ID details")
