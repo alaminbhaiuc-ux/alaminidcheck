@@ -912,7 +912,61 @@ async def ping_command(event):
     if not await is_authorized(event):
         return
     
-    await event.reply("```\n🏓 Pong! Bot is alive!\n```")
+    await event.reply("```\n🏓 Pong! Bot is alive!Currently running on 0.1Cpu and 512mb ram!Super fast!!\n```")
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.pay$'))
+async def pay_command(event):
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    lines = []
+    lines.append("**𝐔𝐍𝐈𝐕𝐄𝐑𝐒𝐄𝐋 𝐒𝐓𝐎𝐑𝐄**")
+    lines.append("💸 𝐒𝐞𝐧𝐝 𝐌𝐨𝐧𝐞𝐲 / 𝐂𝐚𝐬𝐡 𝐈𝐧 𝐎𝐩𝐭𝐢𝐨𝐧𝐬")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("🔴**𝐁𝐊𝐀𝐒𝐇(বিকাশ)**")
+    lines.append("📲 `01765835371`")
+    lines.append("")
+    lines.append("🟠**𝐍𝐀𝐆𝐀𝐃 (নগদ)**")
+    lines.append("📲 `01768021584`")
+    lines.append("")
+    lines.append("🟣**𝐑𝐎𝐂𝐊𝐄𝐓(রকেট)**")
+    lines.append("📲 `01768021584`")
+    lines.append("")
+    lines.append("🟢**𝐔𝐏𝐀𝐘 (উপায়)**")
+    lines.append("📲 `01765835371`")
+    lines.append("")
+    lines.append("🟡**𝐁𝐈𝐍𝐀𝐍𝐂𝐄**")
+    lines.append("📲 `1186576068`")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("```")
+    lines.append("📌 𝐏𝐥𝐞𝐚𝐬𝐞 𝐬𝐞𝐧𝐝 𝐦𝐨𝐧𝐞𝐲 𝐭𝐨 𝐭𝐡𝐞 𝐜𝐨𝐫𝐫𝐞𝐜𝐭 𝐧𝐮𝐦𝐛𝐞𝐫/𝐈𝐃")
+    lines.append("📷 সেন্ড মানি/ক্যাশ ইন করার পর")
+    lines.append("✅ স্ক্রিনশট অথবা শেষ ৩ ডিজিট অবশ্যই পাঠান")
+    lines.append("📷Please send screenshot or the last 3 digits after making the payment✅")
+    lines.append("```")
+    
+    await event.reply("\n".join(lines))
+
+@client.on(events.NewMessage(pattern=r'(?i)^\.rcv$'))
+async def rcv_command(event):
+    # Check authorization - silently ignore if not authorized
+    if not await is_authorized(event):
+        return
+    
+    lines = []
+    lines.append("**ദ്ദി (｡•̀ ,<)**")
+    lines.append("✅𝐏𝐚𝐲𝐦𝐞𝐧𝐭 𝐑𝐞𝐜𝐞𝐢𝐯𝐞𝐝✅")
+    lines.append("💸 __আপনার পেমেন্ট সফলভাবে গ্রহণ করা হয়েছে!__")
+    lines.append("🕐 __এখন আপনার অর্ডার প্রসেসিংয়ে আছে__")
+    lines.append("📦__ অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন__")
+    lines.append("🔐 __𝟏𝟎𝟎% নিরাপদ ও বিশ্বাসযোগ্য সার্ভিস__✅")
+    lines.append("💸 __Your payment has been received successfully!__")
+    lines.append("🕐 __Your order is now being processed__")
+    lines.append("📦 __Please wait for a moment__")
+    lines.append("🔐 __𝟏𝟎𝟎% safe and reliable service__✅")
+    
+    await event.reply("\n".join(lines))
 
 @client.on(events.NewMessage(pattern=r'(?i)^\.help$'))
 async def help_command(event):
